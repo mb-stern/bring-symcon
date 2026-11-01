@@ -2,6 +2,7 @@
     "translations": {
         "de": {
             "List": "Liste",
+            "Configured list (currently unavailable)": "Konfigurierte Liste (derzeit nicht verfügbar)",
             "Refresh Interval": "Aktualisierungsintervall",
             "seconds": "Sekunden",
             "Bring! Notifications": "Bring! Benachrichtigung",

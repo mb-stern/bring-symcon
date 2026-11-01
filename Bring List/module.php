@@ -192,14 +192,12 @@ class BringList extends IPSModuleStrict
 
         if ($this->HasActiveParent()) {
             $AllLists = @$this->GetLists();
-            $this->WriteAttributeArray(\Bring\Attribute::AllLists, $AllLists);
-            $Values = [];
-            foreach ($AllLists as $List) {
-                $Values[] = [
-                    'caption'=> $List[\Bring\Attribute::Name],
-                    'value'  => $List[\Bring\Property::ListUuid]
-                ];
+            if ($AllLists === false) {
+                $AllLists = $this->ReadAttributeArray(\Bring\Attribute::AllLists);
+            } else {
+                $this->WriteAttributeArray(\Bring\Attribute::AllLists, $AllLists);
             }
+            $Values = $this->GetListOptions($AllLists);
             $this->UpdateFormField(\Bring\Property::ListUuid, 'options', json_encode($Values));
             $this->UserDefinedItems = @$this->GetListDetail();
             $this->List = [
@@ -630,6 +628,23 @@ class BringList extends IPSModuleStrict
             return json_encode($Form);
         }
         $Lists = $this->ReadAttributeArray(\Bring\Attribute::AllLists);
+        $this->RegisterParent();
+        if ($this->HasActiveParent()) {
+            $CurrentLists = $this->GetLists();
+            if ($CurrentLists !== false) {
+                $Lists = $CurrentLists;
+                $this->WriteAttributeArray(\Bring\Attribute::AllLists, $Lists);
+            }
+        }
+        $Values = $this->GetListOptions($Lists);
+        $Form['elements'][0]['items'][0]['options'] = $Values;
+        $this->SendDebug('FORM', json_encode($Form), 0);
+        $this->SendDebug('FORM', json_last_error_msg(), 0);
+        return json_encode($Form);
+    }
+
+    private function GetListOptions(array $Lists): array
+    {
         $Values = [];
         foreach ($Lists as $List) {
             $Values[] = [
@@ -637,10 +652,14 @@ class BringList extends IPSModuleStrict
                 'value'  => $List[\Bring\Property::ListUuid]
             ];
         }
-        $Form['elements'][0]['items'][0]['options'] = $Values;
-        $this->SendDebug('FORM', json_encode($Form), 0);
-        $this->SendDebug('FORM', json_last_error_msg(), 0);
-        return json_encode($Form);
+        $SelectedList = $this->ReadPropertyString(\Bring\Property::ListUuid);
+        if ($SelectedList !== '' && !in_array($SelectedList, array_column($Values, 'value'), true)) {
+            $Values[] = [
+                'caption' => $this->Translate('Configured list (currently unavailable)') . ': ' . $SelectedList,
+                'value'   => $SelectedList
+            ];
+        }
+        return $Values;
     }
 
     /**
@@ -697,17 +716,17 @@ class BringList extends IPSModuleStrict
     /**
      * GetLists
      *
-     * @return array
+     * @return array|false
      */
-    private function GetLists(): array
+    private function GetLists(): array|false
     {
         $Result = $this->SendDataToParent(\Bring\Api::GetLists());
         if (!$Result) {
-            return [];
+            return false;
         }
-        $Result = unserialize($Result);
-        if ($Result === false) {
-            return [];
+        $Result = unserialize($Result, ['allowed_classes' => false]);
+        if (!is_array($Result) || !isset($Result['lists']) || !is_array($Result['lists'])) {
+            return false;
         }
         $this->SendDebug(__FUNCTION__, $Result, 0);
         return $Result['lists'];
