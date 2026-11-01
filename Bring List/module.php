@@ -113,7 +113,6 @@ class BringList extends IPSModuleStrict
                             [
                                 'Value'       => 0,
                                 'Caption'     => $this->Translate('Reload'),
-                                'ColorActive' => true,
                                 'Color'       => 0xff0000,
                                 'IconActive'  => false,
                                 'IconValue'   => ''
