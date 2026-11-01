@@ -279,7 +279,7 @@ class BringAccount extends IPSModuleStrict
         );
         $this->SendDebug(__FUNCTION__, $Result, 0);
 
-        if ($Result) {
+        if (is_string($Result) && $Result !== '') {
             $this->WriteAttributeString(\Bring\Attribute::UserImage, $Result);
             $this->UpdateFormField('UserImage', 'image', $Result);
         }
@@ -334,17 +334,14 @@ class BringAccount extends IPSModuleStrict
         if ($HttpCode != 0) {
             $this->SendDebug('Request Headers:' . $_IPS['THREAD'], curl_getinfo($ch)['request_header'], 0);
         }
+        $HeaderSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $curl_errno = curl_errno($ch);
         curl_close($ch);
         $Header = '';
         $Result = '';
         if (!is_bool($response)) {
-            $Parts = explode("\r\n\r\n", $response);
-            $Header = array_shift($Parts);
-            $Result = implode("\r\n\r\n", $Parts);
-            if (is_null($Result)) {
-                $Result = '';
-            }
+            $Header = substr($response, 0, $HeaderSize);
+            $Result = substr($response, $HeaderSize);
         }
         $this->SendDebug('Result Headers:' . $_IPS['THREAD'], $Header, 0);
         $this->SendDebug('Result Body:' . $_IPS['THREAD'], $Result, 0);
@@ -376,24 +373,29 @@ class BringAccount extends IPSModuleStrict
                 if (($RequestMethod != \Bring\Api\RequestMethod::GET) && ($Result == '')) {
                     $Result = true;
                 } else {
-                    $Headers = self::http_parse_headers($Header);
-                    $Headers['content-type'] ?? '';
-                    switch ($Headers['content-type']) {
-                        case 'image/jpeg':
-                        case 'image/jpg':
-                        case 'image/png':
-                            //$Result='data:'.$Headers['content-type'].';base64,' . base64_encode($Result);
-                            $Result = 'data:image/png;base64,' . base64_encode($Result);
-                            break;
-                        default:
-                            $Result = json_decode($Result, true);
-                            break;
-                    }
+                    $Result = self::DecodeResponse($Header, $Result);
                 }
                 break;
         }
         restore_error_handler();
         $this->SendDebug('Result:' . $_IPS['THREAD'], $Result, 0);
+        return $Result;
+    }
+
+    private static function DecodeResponse(string $Header, string $Body): array|string|bool
+    {
+        // Only the final response headers describe the body (e.g. after a proxy handshake).
+        $HeaderBlocks = explode("\r\n\r\n", rtrim($Header, "\r\n"));
+        $Headers = self::http_parse_headers(end($HeaderBlocks));
+        $ContentType = strtolower(trim(explode(';', $Headers['content-type'] ?? '')[0]));
+        if (in_array($ContentType, ['image/jpeg', 'image/jpg', 'image/png'], true)) {
+            return 'data:' . $ContentType . ';base64,' . base64_encode($Body);
+        }
+
+        $Result = json_decode($Body, true);
+        if (json_last_error() !== JSON_ERROR_NONE || (!is_array($Result) && !is_string($Result) && !is_bool($Result))) {
+            return false;
+        }
         return $Result;
     }
 
